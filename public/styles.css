@@ -646,6 +646,29 @@ select:focus {
   font-weight: 800;
 }
 
+.results-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.stage-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stage-summary span {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .checkbox-row input {
   width: 18px;
   height: 18px;
@@ -661,7 +684,7 @@ select:focus {
 
 table {
   width: 100%;
-  min-width: 900px;
+  min-width: 1080px;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -685,6 +708,26 @@ th {
 
 tbody tr:hover {
   background: #fbfcfd;
+}
+
+.result-stage-controls {
+  display: grid;
+  gap: 7px;
+}
+
+.result-stage-controls label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.result-stage-controls input {
+  width: 16px;
+  height: 16px;
+  padding: 0;
 }
 
 .rank {

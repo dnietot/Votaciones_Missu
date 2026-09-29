@@ -13,7 +13,12 @@ const state = {
   selectedAdminCandidateId: null,
   search: "",
   adminTab: "results",
+  adminResultMessage: "",
+  adminResultError: "",
 };
+
+const TOP10_LIMIT = 10;
+const TOP5_LIMIT = 5;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -59,6 +64,19 @@ function candidateBadges(candidate) {
   if (candidate.isTop10) badges.push('<span class="badge top10">Top 10</span>');
   if (candidate.isTop5) badges.push('<span class="badge top5">Top 5</span>');
   return badges.join("");
+}
+
+function stageCounts(items = state.results) {
+  return {
+    top10: items.filter((item) => item.isTop10).length,
+    top5: items.filter((item) => item.isTop5).length,
+  };
+}
+
+function updateCandidateState(candidate, results) {
+  const index = state.candidates.findIndex((item) => item.id === candidate.id);
+  if (index >= 0) state.candidates[index] = candidate;
+  state.results = results;
 }
 
 const JUROR_SCORE_META = [
@@ -580,6 +598,12 @@ function renderAdmin() {
 
 function renderAdminSetup(selected) {
   if (!selected) return '<div class="empty-state">No hay candidatas.</div>';
+  const counts = stageCounts(state.candidates);
+  const top10Disabled = !selected.isTop10 && counts.top10 >= TOP10_LIMIT ? "disabled" : "";
+  const top5Disabled =
+    !selected.isTop5 && (counts.top5 >= TOP5_LIMIT || (!selected.isTop10 && counts.top10 >= TOP10_LIMIT))
+      ? "disabled"
+      : "";
   return `
     <section class="admin-grid">
       <div class="panel">
@@ -596,17 +620,21 @@ function renderAdminSetup(selected) {
           </div>
           <div class="badge-row">${candidateBadges(selected) || '<span class="badge">Preliminar</span>'}</div>
         </div>
+        <div class="stage-summary">
+          <span>Top 10: ${counts.top10}/${TOP10_LIMIT}</span>
+          <span>Top 5: ${counts.top5}/${TOP5_LIMIT}</span>
+        </div>
         <form id="admin-edit-form" class="admin-edit-form">
           <label>
             Comportamiento / informe · 15%
             <input name="behaviorScore" type="number" min="1" max="100" step="0.01" value="${selected.behaviorScore ?? ""}" />
           </label>
           <label class="checkbox-row">
-            <input name="isTop10" type="checkbox" ${selected.isTop10 ? "checked" : ""} />
+            <input name="isTop10" type="checkbox" ${selected.isTop10 ? "checked" : ""} ${top10Disabled} />
             Top 10
           </label>
           <label class="checkbox-row">
-            <input name="isTop5" type="checkbox" ${selected.isTop5 ? "checked" : ""} />
+            <input name="isTop5" type="checkbox" ${selected.isTop5 ? "checked" : ""} ${top5Disabled} />
             Top 5
           </label>
           <button type="submit">Guardar cambios</button>
@@ -619,38 +647,79 @@ function renderAdminSetup(selected) {
 }
 
 function renderResultsTable() {
+  const counts = stageCounts();
   return `
-    <section class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Puesto</th>
-            <th>Candidata</th>
-            <th>Entrevista</th>
-            <th>Gala</th>
-            <th>Traje</th>
-            <th>Speech</th>
-            <th>Pregunta</th>
-            <th>Comport.</th>
-            <th>Total</th>
-            <th>Jurados</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${state.results.map(resultRow).join("")}
-        </tbody>
-      </table>
+    <section class="results-panel">
+      <div class="stage-summary">
+        <span>Top 10: ${counts.top10}/${TOP10_LIMIT}</span>
+        <span>Top 5: ${counts.top5}/${TOP5_LIMIT}</span>
+      </div>
+      <p id="admin-results-message" class="save-message">${escapeHtml(state.adminResultMessage)}</p>
+      <p id="admin-results-error" class="form-error" role="alert">${escapeHtml(state.adminResultError)}</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Puesto</th>
+              <th>Candidata</th>
+              <th>Selección</th>
+              <th>Entrevista</th>
+              <th>Gala</th>
+              <th>Traje</th>
+              <th>Speech</th>
+              <th>Pregunta</th>
+              <th>Comport.</th>
+              <th>Total</th>
+              <th>Jurados</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${state.results.map((result) => resultRow(result, counts)).join("")}
+          </tbody>
+        </table>
+      </div>
     </section>
   `;
 }
 
-function resultRow(result) {
+function resultRow(result, counts) {
+  const top10Disabled = !result.isTop10 && counts.top10 >= TOP10_LIMIT ? "disabled" : "";
+  const top5Disabled =
+    !result.isTop5 && (counts.top5 >= TOP5_LIMIT || (!result.isTop10 && counts.top10 >= TOP10_LIMIT))
+      ? "disabled"
+      : "";
   return `
     <tr>
       <td><span class="rank">${result.rank}</span></td>
       <td>
         <strong>${escapeHtml(result.candidateName)}</strong>
         <div class="badge-row">${candidateBadges(result)}</div>
+      </td>
+      <td>
+        <div class="result-stage-controls">
+          <label>
+            <input
+              class="result-stage-toggle"
+              data-candidate-id="${escapeHtml(result.candidateId)}"
+              data-stage="isTop10"
+              type="checkbox"
+              ${result.isTop10 ? "checked" : ""}
+              ${top10Disabled}
+            />
+            Top 10
+          </label>
+          <label>
+            <input
+              class="result-stage-toggle"
+              data-candidate-id="${escapeHtml(result.candidateId)}"
+              data-stage="isTop5"
+              type="checkbox"
+              ${result.isTop5 ? "checked" : ""}
+              ${top5Disabled}
+            />
+            Top 5
+          </label>
+        </div>
       </td>
       <td>${formatNumber(result.averages.interview)}</td>
       <td>${formatNumber(result.averages.gala)}</td>
@@ -664,10 +733,29 @@ function resultRow(result) {
   `;
 }
 
+function nextStagePayload(result, stage, checked) {
+  let isTop10 = Boolean(result.isTop10);
+  let isTop5 = Boolean(result.isTop5);
+
+  if (stage === "isTop10") {
+    isTop10 = checked;
+    if (!isTop10) isTop5 = false;
+  }
+
+  if (stage === "isTop5") {
+    isTop5 = checked;
+    if (isTop5) isTop10 = true;
+  }
+
+  return { isTop10, isTop5 };
+}
+
 function bindAdminEvents() {
   document.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => {
       state.adminTab = button.dataset.tab;
+      state.adminResultMessage = "";
+      state.adminResultError = "";
       renderAdmin();
     });
   });
@@ -675,6 +763,31 @@ function bindAdminEvents() {
   document.querySelectorAll(".candidate-button").forEach((button) => {
     button.addEventListener("click", () => {
       state.selectedAdminCandidateId = button.dataset.candidateId;
+      renderAdmin();
+    });
+  });
+
+  document.querySelectorAll(".result-stage-toggle").forEach((checkbox) => {
+    checkbox.addEventListener("change", async (event) => {
+      const control = event.currentTarget;
+      const result = state.results.find((item) => item.candidateId === control.dataset.candidateId);
+      if (!result) return;
+
+      control.disabled = true;
+      state.adminResultMessage = "";
+      state.adminResultError = "";
+
+      try {
+        const payload = await api(`/api/admin/candidates/${encodeURIComponent(result.candidateId)}`, {
+          method: "POST",
+          body: JSON.stringify(nextStagePayload(result, control.dataset.stage, control.checked)),
+        });
+        updateCandidateState(payload.candidate, payload.results);
+        state.adminResultMessage = "Selección guardada.";
+      } catch (caught) {
+        state.adminResultError = caught.message;
+      }
+
       renderAdmin();
     });
   });
@@ -697,9 +810,7 @@ function bindAdminEvents() {
           isTop5: data.has("isTop5"),
         }),
       });
-      const index = state.candidates.findIndex((candidate) => candidate.id === payload.candidate.id);
-      state.candidates[index] = payload.candidate;
-      state.results = payload.results;
+      updateCandidateState(payload.candidate, payload.results);
       message.textContent = "Cambios guardados.";
       setTimeout(() => renderAdmin(), 800);
     } catch (caught) {

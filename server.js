@@ -42,6 +42,8 @@ const CRITERIA = [
   { key: "speech", label: "Speech Top 10", weight: WEIGHTS.speech, stage: "top10" },
   { key: "finalQuestion", label: "Pregunta final Top 5", weight: WEIGHTS.finalQuestion, stage: "top5" },
 ];
+const TOP10_LIMIT = 10;
+const TOP5_LIMIT = 5;
 
 const DEFAULT_CREDENTIALS = {
   admin: "admin2026",
@@ -721,6 +723,24 @@ function mergeLockedScores(existingScores, incomingScores, labels, candidate) {
   return merged;
 }
 
+function normalizeCandidateStages(candidate) {
+  candidate.isTop10 = Boolean(candidate.isTop10);
+  candidate.isTop5 = Boolean(candidate.isTop5);
+  if (candidate.isTop5) candidate.isTop10 = true;
+  if (!candidate.isTop10) candidate.isTop5 = false;
+}
+
+function assertCandidateStageLimits(db) {
+  const top10Count = db.candidates.filter((candidate) => candidate.isTop10).length;
+  const top5Count = db.candidates.filter((candidate) => candidate.isTop5).length;
+  if (top10Count > TOP10_LIMIT) {
+    throw new Error(`Solo se pueden seleccionar ${TOP10_LIMIT} candidatas en Top 10.`);
+  }
+  if (top5Count > TOP5_LIMIT) {
+    throw new Error(`Solo se pueden seleccionar ${TOP5_LIMIT} candidatas en Top 5.`);
+  }
+}
+
 function requiredCriteriaForCandidate(candidate) {
   const keys = ["interview", "gala", "swimsuit"];
   if (candidate.isTop10) keys.push("speech");
@@ -1262,8 +1282,8 @@ async function handleApi(req, res) {
       }
       if ("isTop10" in body) candidate.isTop10 = Boolean(body.isTop10);
       if ("isTop5" in body) candidate.isTop5 = Boolean(body.isTop5);
-      if (candidate.isTop5) candidate.isTop10 = true;
-      if (!candidate.isTop10) candidate.isTop5 = false;
+      normalizeCandidateStages(candidate);
+      assertCandidateStageLimits(db);
       candidate.updatedAt = new Date().toISOString();
       db.audit.push({
         at: candidate.updatedAt,
