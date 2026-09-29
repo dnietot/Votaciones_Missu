@@ -61,6 +61,14 @@ function candidateBadges(candidate) {
   return badges.join("");
 }
 
+const JUROR_SCORE_META = [
+  { key: "interview", label: "Entrevista", weight: 30 },
+  { key: "gala", label: "Gala", weight: 25 },
+  { key: "swimsuit", label: "Traje de baño", weight: 20 },
+  { key: "speech", label: "Speech Top 10", weight: 5, requires: "isTop10" },
+  { key: "finalQuestion", label: "Pregunta final Top 5", weight: 5, requires: "isTop5" },
+];
+
 function requiredKeys(candidate) {
   const keys = ["interview", "gala", "swimsuit"];
   if (candidate.isTop10) keys.push("speech");
@@ -70,6 +78,53 @@ function requiredKeys(candidate) {
 
 function evaluationFor(candidateId) {
   return state.evaluations.find((evaluation) => evaluation.candidateId === candidateId);
+}
+
+function activeJurorScoreMeta(candidate) {
+  return JUROR_SCORE_META.filter((criterion) => !criterion.requires || candidate[criterion.requires]);
+}
+
+function scoreValue(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const numericValue = typeof value === "number" ? value : Number(String(value).replace(",", "."));
+  if (!Number.isFinite(numericValue) || numericValue < 1 || numericValue > 100) return null;
+  return numericValue;
+}
+
+function scoreAccumulator(candidate, scores) {
+  const activeCriteria = activeJurorScoreMeta(candidate);
+  const maxPoints = activeCriteria.reduce((total, criterion) => total + criterion.weight, 0);
+  let accumulated = 0;
+  let completed = 0;
+
+  activeCriteria.forEach((criterion) => {
+    const value = scoreValue(scores?.[criterion.key]);
+    if (value === null) return;
+    accumulated += value * (criterion.weight / 100);
+    completed += 1;
+  });
+
+  return {
+    accumulated: Math.round(accumulated * 100) / 100,
+    maxPoints,
+    completed,
+    totalCriteria: activeCriteria.length,
+    percent: maxPoints > 0 ? Math.min(100, Math.round((accumulated / maxPoints) * 1000) / 10) : 0,
+  };
+}
+
+function accumulatorHtml(candidate, scores) {
+  const accumulator = scoreAccumulator(candidate, scores);
+  return `
+    <div class="accumulator-card" id="score-accumulator">
+      <span>Acumulado</span>
+      <strong id="score-accumulator-total">${formatNumber(accumulator.accumulated)} / ${formatNumber(accumulator.maxPoints, 0)}</strong>
+      <div class="accumulator-meter" aria-hidden="true">
+        <span id="score-accumulator-bar" style="width: ${accumulator.percent}%"></span>
+      </div>
+      <p id="score-accumulator-detail">${accumulator.completed}/${accumulator.totalCriteria} criterios · ${formatNumber(accumulator.percent, 1)}%</p>
+    </div>
+  `;
 }
 
 function evaluationStatus(candidate) {
@@ -232,7 +287,11 @@ function renderJuror() {
               </form>
             </section>
             <aside class="panel">
-              <h2>Pesos</h2>
+              <div class="weights-head">
+                <h2>Pesos</h2>
+                <span>Jurado</span>
+              </div>
+              ${accumulatorHtml(selected, scores)}
               <div class="weight-list">
                 ${weightRow("Entrevista", "30%")}
                 ${weightRow("Gala", "25%")}
@@ -277,6 +336,32 @@ function weightRow(label, value) {
   `;
 }
 
+function currentScoreValues(selected) {
+  const scores = { ...(evaluationFor(selected.id)?.scores || {}) };
+  document.querySelectorAll("#score-form input[name]").forEach((input) => {
+    if (input.disabled) return;
+    if (input.value === "") delete scores[input.name];
+    else scores[input.name] = input.value;
+  });
+  return scores;
+}
+
+function updateScoreAccumulator(selected) {
+  const accumulator = scoreAccumulator(selected, currentScoreValues(selected));
+  const total = document.querySelector("#score-accumulator-total");
+  const detail = document.querySelector("#score-accumulator-detail");
+  const bar = document.querySelector("#score-accumulator-bar");
+  if (total) {
+    total.textContent = `${formatNumber(accumulator.accumulated)} / ${formatNumber(accumulator.maxPoints, 0)}`;
+  }
+  if (detail) {
+    detail.textContent = `${accumulator.completed}/${accumulator.totalCriteria} criterios · ${formatNumber(accumulator.percent, 1)}%`;
+  }
+  if (bar) {
+    bar.style.width = `${accumulator.percent}%`;
+  }
+}
+
 function bindJurorEvents(selected) {
   document.querySelector("#candidate-search")?.addEventListener("input", (event) => {
     state.search = event.target.value;
@@ -296,6 +381,10 @@ function bindJurorEvents(selected) {
       const input = document.querySelector(`[name="${key}"]`);
       await submitScores(selected, { [key]: input?.value ?? "" }, "Criterio guardado.");
     });
+  });
+
+  document.querySelectorAll("#score-form input[name]").forEach((input) => {
+    input.addEventListener("input", () => updateScoreAccumulator(selected));
   });
 
   document.querySelector("#score-form")?.addEventListener("submit", async (event) => {

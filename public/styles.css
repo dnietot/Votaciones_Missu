@@ -469,6 +469,70 @@ select:focus {
   gap: 10px;
 }
 
+.weights-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.weights-head h2 {
+  margin-bottom: 0;
+}
+
+.weights-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.accumulator-card {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+  border: 1px solid #c8e0d3;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f2f9f5;
+}
+
+.accumulator-card > span {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.accumulator-card strong {
+  color: var(--ink);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.accumulator-card p {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.accumulator-meter {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: white;
+}
+
+.accumulator-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  transition: width 140ms ease;
+}
+
 .weight-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
