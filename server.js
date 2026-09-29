@@ -18,11 +18,11 @@ const SUPABASE_AUTH_KEY = SUPABASE_PUBLISHABLE_KEY || SUPABASE_SECRET_KEY;
 const USE_SUPABASE_AUTH = Boolean(USE_SUPABASE && SUPABASE_AUTH_KEY);
 const SUPABASE_AUTH_EMAIL_DOMAIN =
   process.env.SUPABASE_AUTH_EMAIL_DOMAIN || "jurados.example.com";
+const PUBLIC_URL = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "";
 const SESSION_COOKIE_NAME = "sid";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 const SESSION_REFRESH_WINDOW_SECONDS = 60 * 5;
-const COOKIE_SECURE =
-  process.env.COOKIE_SECURE === "true" || (process.env.PUBLIC_URL || "").startsWith("https://");
+const COOKIE_SECURE = process.env.COOKIE_SECURE === "true" || PUBLIC_URL.startsWith("https://");
 
 const WEIGHTS = {
   interview: 0.3,
@@ -841,7 +841,7 @@ async function getArcgisToken() {
     username,
     password,
     client: "referer",
-    referer: process.env.PUBLIC_URL || `http://localhost:${PORT}`,
+    referer: PUBLIC_URL || `http://localhost:${PORT}`,
     expiration: "60",
     f: "json",
   });

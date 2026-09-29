@@ -2,6 +2,8 @@
 
 Aplicación web para calificar 20 candidatas con 6 jurados. Puede funcionar localmente con archivo JSON o publicada en Render con Supabase.
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Fdnietot%2FVotaciones_Missu)
+
 ## Accesos de prueba
 
 - Organización: `admin` / `admin2026`
@@ -66,12 +68,19 @@ Las rutas `/api/*` quedan protegidas con una cookie `HttpOnly`; cada sesión se 
 
 ## Render
 
-Publica esta carpeta como servicio web de Node.
+Publica este repositorio como servicio web de Node:
+
+```text
+https://github.com/dnietot/Votaciones_Missu
+```
 
 Configuración:
 
 - Build command: `npm install`
 - Start command: `npm start`
+- Service type: `Web Service`
+- Runtime: `Node`
+- Plan sugerido para pruebas: `Free`
 
 Variables de entorno:
 
@@ -83,6 +92,16 @@ SUPABASE_SECRET_KEY=sb_secret_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 Render también puede leer el archivo `render.yaml`, dejando `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` y `SUPABASE_SECRET_KEY` para llenarlas desde el panel.
+
+Para publicarlo:
+
+1. Entrar a Render y crear un `Blueprint` o un `Web Service` desde GitHub.
+2. Seleccionar `dnietot/Votaciones_Missu`.
+3. Confirmar que Render lea `render.yaml`.
+4. Pegar las tres variables de Supabase cuando Render las solicite.
+5. Esperar el primer deploy y abrir la URL `onrender.com`.
+
+Para un evento real, conviene subir de `Free` a un plan pago antes de la votación, porque los servicios gratuitos pueden pausarse por inactividad.
 
 ## ArcGIS opcional
 
