@@ -150,12 +150,26 @@ function ensureDefaultAppUsers(db) {
   return changed;
 }
 
+function isSupabasePlatformApiKey(key) {
+  return /^sb_(publishable|secret)_/i.test(String(key || ""));
+}
+
+function withSupabaseApiKey(headers, key) {
+  const nextHeaders = {
+    ...headers,
+    apikey: key,
+  };
+  if (key && !isSupabasePlatformApiKey(key)) {
+    nextHeaders.Authorization = `Bearer ${key}`;
+  }
+  return nextHeaders;
+}
+
 function supabaseHeaders(extra = {}) {
-  return {
-    apikey: SUPABASE_SECRET_KEY,
+  return withSupabaseApiKey({
     "Content-Type": "application/json",
     ...extra,
-  };
+  }, SUPABASE_SECRET_KEY);
 }
 
 async function supabaseRequest(table, options = {}) {
@@ -187,12 +201,10 @@ async function supabaseDelete(table, query) {
 
 function supabaseAuthHeaders({ admin = false, accessToken = "" } = {}) {
   const key = admin ? SUPABASE_SECRET_KEY : SUPABASE_AUTH_KEY;
-  const headers = {
-    apikey: key,
+  const headers = withSupabaseApiKey({
     "Content-Type": "application/json",
-  };
+  }, key);
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
-  else if (admin) headers.Authorization = `Bearer ${SUPABASE_SECRET_KEY}`;
   return headers;
 }
 

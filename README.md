@@ -92,6 +92,7 @@ SUPABASE_SECRET_KEY=sb_secret_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 Render también puede leer el archivo `render.yaml`, dejando `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` y `SUPABASE_SECRET_KEY` para llenarlas desde el panel.
+`SUPABASE_SECRET_KEY` puede ser una llave nueva de Supabase con formato `sb_secret_...` o una llave legacy `service_role`. No la subas al repositorio.
 
 Para publicarlo:
 
