@@ -11,8 +11,10 @@ const state = {
   results: [],
   selectedCandidateId: null,
   selectedAdminCandidateId: null,
+  selectedSystemCandidateId: null,
   search: "",
   adminTab: "results",
+  systemTab: "names",
   adminResultMessage: "",
   adminResultError: "",
 };
@@ -76,7 +78,13 @@ function stageCounts(items = state.results) {
 function updateCandidateState(candidate, results) {
   const index = state.candidates.findIndex((item) => item.id === candidate.id);
   if (index >= 0) state.candidates[index] = candidate;
-  state.results = results;
+  state.results = sortedResults(results);
+}
+
+function sortedResults(results = state.results) {
+  return (results || [])
+    .slice()
+    .sort((a, b) => Number(b.weightedTotal || 0) - Number(a.weightedTotal || 0) || a.order - b.order);
 }
 
 const JUROR_SCORE_META = [
@@ -162,12 +170,16 @@ function selectDefaultCandidate() {
   if (!state.selectedAdminCandidateId && state.candidates.length) {
     state.selectedAdminCandidateId = state.candidates[0].id;
   }
+  if (!state.selectedSystemCandidateId && state.candidates.length) {
+    state.selectedSystemCandidateId = state.candidates[0].id;
+  }
 }
 
 async function loadApp() {
   try {
     const payload = await api("/api/bootstrap");
     Object.assign(state, payload);
+    state.results = sortedResults(state.results);
     selectDefaultCandidate();
     renderApp();
   } catch (error) {
@@ -445,53 +457,184 @@ async function submitScores(selected, scores, successMessage) {
 }
 
 function renderSystemAdmin() {
+  const selected =
+    state.candidates.find((candidate) => candidate.id === state.selectedSystemCandidateId) || state.candidates[0];
   app.innerHTML = `
     <div class="app-shell">
       ${topbarHtml()}
       <main class="main">
-        <section class="system-grid">
-          <div class="panel">
-            <div class="section-head">
-              <h2>Candidatas</h2>
-              <p>Nombres visibles para jurados y resultados.</p>
-            </div>
-            <div class="name-edit-list">
-              ${state.candidates
-                .slice()
-                .sort((a, b) => a.order - b.order)
-                .map((candidate) =>
-                  nameEditRow("candidate", candidate.id, `Candidata ${candidate.order}`, candidate.name),
-                )
-                .join("")}
-            </div>
+        <div class="toolbar">
+          <div class="tabs">
+            <button class="tab system-tab ${state.systemTab === "names" ? "active" : ""}" data-tab="names">Configuración</button>
+            <button class="tab system-tab ${state.systemTab === "validation" ? "active" : ""}" data-tab="validation">Validación</button>
           </div>
-          <div class="panel">
-            <div class="section-head">
-              <h2>Jurados</h2>
-              <p>Nombres internos de cada cuenta de jurado.</p>
-            </div>
-            <div class="name-edit-list">
-              ${state.jurors
-                .slice()
-                .sort((a, b) => a.username.localeCompare(b.username, "es"))
-                .map((juror) => nameEditRow("juror", juror.id, juror.username, juror.name))
-                .join("")}
-            </div>
-          </div>
-          <div class="panel danger-panel">
-            <div class="section-head">
-              <h2>Pruebas</h2>
-              <p>Borra calificaciones, comportamiento y etapas; conserva nombres y usuarios.</p>
-            </div>
-            <button id="reset-results-button" class="danger-button" type="button">Borrar resultados</button>
-            <p id="reset-results-message" class="save-message"></p>
-            <p id="reset-results-error" class="form-error" role="alert"></p>
-          </div>
-        </section>
+        </div>
+        ${state.systemTab === "validation" ? renderSystemValidation(selected) : renderSystemSettings()}
       </main>
     </div>
   `;
   bindSystemAdminEvents();
+}
+
+function renderSystemSettings() {
+  return `
+    <section class="system-grid">
+      <div class="panel">
+        <div class="section-head">
+          <h2>Candidatas</h2>
+          <p>Nombres visibles para jurados y resultados.</p>
+        </div>
+        <div class="name-edit-list">
+          ${state.candidates
+            .slice()
+            .sort((a, b) => a.order - b.order)
+            .map((candidate) =>
+              nameEditRow("candidate", candidate.id, `Candidata ${candidate.order}`, candidate.name),
+            )
+            .join("")}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="section-head">
+          <h2>Jurados</h2>
+          <p>Nombres internos de cada cuenta de jurado.</p>
+        </div>
+        <div class="name-edit-list">
+          ${state.jurors
+            .slice()
+            .sort((a, b) => a.username.localeCompare(b.username, "es"))
+            .map((juror) => nameEditRow("juror", juror.id, juror.username, juror.name))
+            .join("")}
+        </div>
+      </div>
+      <div class="panel danger-panel">
+        <div class="section-head">
+          <h2>Pruebas</h2>
+          <p>Borra calificaciones, comportamiento y etapas; conserva nombres y usuarios.</p>
+        </div>
+        <button id="reset-results-button" class="danger-button" type="button">Borrar resultados</button>
+        <p id="reset-results-message" class="save-message"></p>
+        <p id="reset-results-error" class="form-error" role="alert"></p>
+      </div>
+    </section>
+  `;
+}
+
+function renderSystemValidation(selected) {
+  if (!selected) return '<div class="empty-state">No hay candidatas para validar.</div>';
+  const result = state.results.find((item) => item.candidateId === selected.id);
+  return `
+    <section class="system-validation-grid">
+      <div class="panel">
+        <div class="section-head">
+          <h2>Candidatas</h2>
+          <p>Selecciona una candidata para revisar cada jurado.</p>
+        </div>
+        <div class="admin-candidate-list">
+          ${renderValidationCandidateList(selected.id)}
+        </div>
+      </div>
+      <div class="panel validation-panel">
+        <div class="candidate-head">
+          <div>
+            <h1>${escapeHtml(selected.name)}</h1>
+            <p>Calificaciones registradas por jurado</p>
+          </div>
+          <div class="badge-row">${candidateBadges(selected) || '<span class="badge">Preliminar</span>'}</div>
+        </div>
+        <div class="stage-summary">
+          <span>Puesto: ${result?.rank ?? "-"}</span>
+          <span>Total: ${formatNumber(result?.weightedTotal)}</span>
+          <span>Jurados completos: ${result ? `${result.completedJurors}/${result.jurorCount}` : "-"}</span>
+        </div>
+        ${validationTableHtml(selected)}
+      </div>
+    </section>
+  `;
+}
+
+function renderValidationCandidateList(selectedId) {
+  return state.candidates
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .map((candidate) => {
+      const result = state.results.find((item) => item.candidateId === candidate.id);
+      return `
+        <button class="candidate-button system-validation-candidate ${candidate.id === selectedId ? "active" : ""}" data-candidate-id="${escapeHtml(candidate.id)}">
+          <strong>${candidate.order}. ${escapeHtml(candidate.name)}</strong>
+          <span class="candidate-row-meta">
+            <span>Total ${formatNumber(result?.weightedTotal)}</span>
+            <span>${result ? `${result.completedJurors}/${result.jurorCount}` : "0/0"} jurados</span>
+          </span>
+          <span class="badge-row">${candidateBadges(candidate)}</span>
+        </button>
+      `;
+    })
+    .join("");
+}
+
+function validationTableHtml(candidate) {
+  return `
+    <div class="table-wrap validation-table-wrap">
+      <table class="validation-table">
+        <thead>
+          <tr>
+            <th>Jurado</th>
+            <th>Entrevista</th>
+            <th>Gala</th>
+            <th>Traje</th>
+            <th>Speech</th>
+            <th>Pregunta</th>
+            <th>Acumulado</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${state.jurors
+            .slice()
+            .sort((a, b) => a.username.localeCompare(b.username, "es"))
+            .map((juror) => validationRowHtml(candidate, juror))
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function evaluationForJurorCandidate(jurorId, candidateId) {
+  return state.evaluations.find(
+    (evaluation) => evaluation.jurorId === jurorId && evaluation.candidateId === candidateId,
+  );
+}
+
+function validationRowHtml(candidate, juror) {
+  const evaluation = evaluationForJurorCandidate(juror.id, candidate.id);
+  const scores = evaluation?.scores || {};
+  const accumulator = scoreAccumulator(candidate, scores);
+  const activeKeys = activeJurorScoreMeta(candidate).map((criterion) => criterion.key);
+  const presentKeys = activeKeys.filter((key) => scoreValue(scores[key]) !== null);
+  const status = presentKeys.length === activeKeys.length
+    ? { label: "Completa", className: "done" }
+    : presentKeys.length > 0
+      ? { label: "Parcial", className: "partial" }
+      : { label: "Pendiente", className: "" };
+  return `
+    <tr>
+      <td>
+        <strong>${escapeHtml(juror.name)}</strong>
+        <div class="muted-small">${escapeHtml(juror.username)}</div>
+      </td>
+      ${JUROR_SCORE_META.map((criterion) => validationScoreCell(candidate, scores, criterion)).join("")}
+      <td><strong>${formatNumber(accumulator.accumulated)} / ${formatNumber(accumulator.maxPoints, 0)}</strong></td>
+      <td><span class="status-pill ${status.className}">${status.label}</span></td>
+    </tr>
+  `;
+}
+
+function validationScoreCell(candidate, scores, criterion) {
+  const inactive = criterion.requires && !candidate[criterion.requires];
+  if (inactive) return '<td class="muted-cell">No aplica</td>';
+  return `<td>${formatNumber(scores?.[criterion.key])}</td>`;
 }
 
 function nameEditRow(kind, id, label, value) {
@@ -509,6 +652,20 @@ function nameEditRow(kind, id, label, value) {
 }
 
 function bindSystemAdminEvents() {
+  document.querySelectorAll(".system-tab").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.systemTab = button.dataset.tab;
+      renderSystemAdmin();
+    });
+  });
+
+  document.querySelectorAll(".system-validation-candidate").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedSystemCandidateId = button.dataset.candidateId;
+      renderSystemAdmin();
+    });
+  });
+
   document.querySelector("#reset-results-button")?.addEventListener("click", async () => {
     const message = document.querySelector("#reset-results-message");
     const error = document.querySelector("#reset-results-error");
@@ -647,7 +804,8 @@ function renderAdminSetup(selected) {
 }
 
 function renderResultsTable() {
-  const counts = stageCounts();
+  const rows = sortedResults();
+  const counts = stageCounts(rows);
   return `
     <section class="results-panel">
       <div class="stage-summary">
@@ -674,7 +832,7 @@ function renderResultsTable() {
             </tr>
           </thead>
           <tbody>
-            ${state.results.map((result) => resultRow(result, counts)).join("")}
+            ${rows.map((result) => resultRow(result, counts)).join("")}
           </tbody>
         </table>
       </div>

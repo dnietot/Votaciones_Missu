@@ -1128,6 +1128,8 @@ async function handleApi(req, res) {
         payload.evaluations = db.evaluations;
       } else if (user.role === "system_admin") {
         payload.jurors = db.users.filter((item) => item.role === "juror").map(safeUser);
+        payload.evaluations = db.evaluations;
+        payload.results = computeResults(db);
       }
 
       sendJson(res, 200, payload);
