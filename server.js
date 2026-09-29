@@ -11,10 +11,12 @@ const DB_PATH = path.join(DATA_DIR, "database.json");
 const SUPABASE_URL = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const SUPABASE_PUBLISHABLE_KEY =
   process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || "";
-const SUPABASE_SECRET_KEY =
-  process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-const USE_SUPABASE = Boolean(SUPABASE_URL && SUPABASE_SECRET_KEY);
-const SUPABASE_AUTH_KEY = SUPABASE_PUBLISHABLE_KEY || SUPABASE_SECRET_KEY;
+const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || "";
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const SUPABASE_DATA_KEY = SUPABASE_SECRET_KEY || SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_AUTH_ADMIN_KEY = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_SECRET_KEY;
+const USE_SUPABASE = Boolean(SUPABASE_URL && SUPABASE_DATA_KEY);
+const SUPABASE_AUTH_KEY = SUPABASE_PUBLISHABLE_KEY || SUPABASE_DATA_KEY;
 const USE_SUPABASE_AUTH = Boolean(USE_SUPABASE && SUPABASE_AUTH_KEY);
 const SUPABASE_AUTH_EMAIL_DOMAIN =
   process.env.SUPABASE_AUTH_EMAIL_DOMAIN || "jurados.example.com";
@@ -169,7 +171,7 @@ function supabaseHeaders(extra = {}) {
   return withSupabaseApiKey({
     "Content-Type": "application/json",
     ...extra,
-  }, SUPABASE_SECRET_KEY);
+  }, SUPABASE_DATA_KEY);
 }
 
 async function supabaseRequest(table, options = {}) {
@@ -200,7 +202,7 @@ async function supabaseDelete(table, query) {
 }
 
 function supabaseAuthHeaders({ admin = false, accessToken = "" } = {}) {
-  const key = admin ? SUPABASE_SECRET_KEY : SUPABASE_AUTH_KEY;
+  const key = admin ? SUPABASE_AUTH_ADMIN_KEY : SUPABASE_AUTH_KEY;
   const headers = withSupabaseApiKey({
     "Content-Type": "application/json",
   }, key);
@@ -220,13 +222,22 @@ async function supabaseAuthRequest(pathname, options = {}) {
   const text = await response.text();
   const payload = text ? JSON.parse(text) : null;
   if (!response.ok) {
-    const message =
+    let message =
       payload?.msg ||
       payload?.message ||
       payload?.error_description ||
       payload?.error ||
       text ||
       "Error consultando Supabase Auth.";
+    if (
+      options.admin &&
+      /valid Bearer token|Invalid JWT|Bearer/i.test(message) &&
+      isSupabasePlatformApiKey(SUPABASE_AUTH_ADMIN_KEY)
+    ) {
+      message =
+        "Supabase Auth Admin requiere una llave service_role en SUPABASE_SERVICE_ROLE_KEY. " +
+        "Agrega esa variable en Render o define SUPABASE_SEED_AUTH_USERS=false si los usuarios de Auth ya existen.";
+    }
     const error = new Error(message);
     error.status = response.status;
     throw error;

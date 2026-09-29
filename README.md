@@ -89,10 +89,11 @@ APP_SECRET=un_texto_largo_aleatorio
 SUPABASE_URL=https://ncvfxdfoggrccicboxjn.supabase.co
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_IYJoxnSkIDqqFXlw3FMMog_3ft8itzt
 SUPABASE_SECRET_KEY=sb_secret_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+SUPABASE_SERVICE_ROLE_KEY=eyJxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 Render también puede leer el archivo `render.yaml`, dejando `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` y `SUPABASE_SECRET_KEY` para llenarlas desde el panel.
-`SUPABASE_SECRET_KEY` puede ser una llave nueva de Supabase con formato `sb_secret_...` o una llave legacy `service_role`. No la subas al repositorio.
+`SUPABASE_SECRET_KEY` puede ser una llave nueva de Supabase con formato `sb_secret_...`. `SUPABASE_SERVICE_ROLE_KEY` es la llave `service_role` legacy que necesita Supabase Auth Admin para crear usuarios Auth desde el servidor. No subas ninguna llave real al repositorio.
 
 Para publicarlo:
 
