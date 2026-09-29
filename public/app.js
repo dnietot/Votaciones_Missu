@@ -8,6 +8,7 @@ const state = {
   candidates: [],
   evaluations: [],
   jurors: [],
+  passwordUsers: [],
   results: [],
   selectedCandidateId: null,
   selectedAdminCandidateId: null,
@@ -507,6 +508,15 @@ function renderSystemSettings() {
             .join("")}
         </div>
       </div>
+      <div class="panel password-panel">
+        <div class="section-head">
+          <h2>Contraseñas</h2>
+          <p>Actualiza accesos de organización, jurados y tu usuario de sistema.</p>
+        </div>
+        <div class="password-edit-list">
+          ${passwordManagedRows()}
+        </div>
+      </div>
       <div class="panel danger-panel">
         <div class="section-head">
           <h2>Pruebas</h2>
@@ -637,6 +647,37 @@ function validationScoreCell(candidate, scores, criterion) {
   return `<td>${formatNumber(scores?.[criterion.key])}</td>`;
 }
 
+function passwordManagedRows() {
+  const roleOrder = { system_admin: 0, admin: 1, juror: 2 };
+  return (state.passwordUsers || [])
+    .slice()
+    .sort((a, b) => (roleOrder[a.role] ?? 9) - (roleOrder[b.role] ?? 9) || a.username.localeCompare(b.username, "es"))
+    .map(passwordEditRow)
+    .join("");
+}
+
+function passwordEditRow(user) {
+  return `
+    <form class="password-edit-form" data-id="${escapeHtml(user.id)}">
+      <div>
+        <strong>${escapeHtml(user.name)}</strong>
+        <span>${escapeHtml(user.username)} · ${roleLabel(user.role)}</span>
+      </div>
+      <label>
+        Nueva contraseña
+        <input name="password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required />
+      </label>
+      <label>
+        Confirmar
+        <input name="confirmPassword" type="password" minlength="8" maxlength="128" autocomplete="new-password" required />
+      </label>
+      <button type="submit">Actualizar</button>
+      <p class="save-message"></p>
+      <p class="form-error" role="alert"></p>
+    </form>
+  `;
+}
+
 function nameEditRow(kind, id, label, value) {
   return `
     <form class="name-edit-form" data-kind="${kind}" data-id="${escapeHtml(id)}">
@@ -689,6 +730,36 @@ function bindSystemAdminEvents() {
     } catch (caught) {
       error.textContent = caught.message;
     }
+  });
+
+  document.querySelectorAll(".password-edit-form").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const currentForm = event.currentTarget;
+      const data = new FormData(currentForm);
+      const password = String(data.get("password") || "");
+      const confirmPassword = String(data.get("confirmPassword") || "");
+      const message = currentForm.querySelector(".save-message");
+      const error = currentForm.querySelector(".form-error");
+      message.textContent = "";
+      error.textContent = "";
+
+      if (password !== confirmPassword) {
+        error.textContent = "Las contraseñas no coinciden.";
+        return;
+      }
+
+      try {
+        await api(`/api/system/users/${encodeURIComponent(currentForm.dataset.id)}/password`, {
+          method: "POST",
+          body: JSON.stringify({ password }),
+        });
+        currentForm.reset();
+        message.textContent = "Contraseña actualizada.";
+      } catch (caught) {
+        error.textContent = caught.message;
+      }
+    });
   });
 
   document.querySelectorAll(".name-edit-form").forEach((form) => {

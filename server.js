@@ -25,6 +25,8 @@ const SESSION_COOKIE_NAME = "sid";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 const SESSION_REFRESH_WINDOW_SECONDS = 60 * 5;
 const COOKIE_SECURE = process.env.COOKIE_SECURE === "true" || PUBLIC_URL.startsWith("https://");
+const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MAX_LENGTH = 128;
 
 const WEIGHTS = {
   interview: 0.3,
@@ -278,6 +280,49 @@ async function createSupabaseAuthUser(appUser, password) {
     }
     throw error;
   }
+}
+
+async function getSupabaseAuthUserById(authUserId) {
+  if (!USE_SUPABASE_AUTH || !authUserId) return null;
+  try {
+    const payload = await supabaseAuthRequest(`admin/users/${encodeURIComponent(authUserId)}`, {
+      admin: true,
+    });
+    return payload?.user || payload;
+  } catch (error) {
+    if (error.status === 404) return null;
+    throw error;
+  }
+}
+
+async function findSupabaseAuthUserByEmail(email) {
+  if (!USE_SUPABASE_AUTH || !email) return null;
+  const payload = await supabaseAuthRequest(
+    `admin/users?per_page=100&page=1&filter=${encodeURIComponent(email)}`,
+    { admin: true },
+  );
+  const users = Array.isArray(payload?.users) ? payload.users : Array.isArray(payload) ? payload : [];
+  return users.find((authUser) => String(authUser.email || "").toLowerCase() === email.toLowerCase()) || null;
+}
+
+async function updateSupabaseAuthPassword(appUser, password) {
+  if (!USE_SUPABASE_AUTH) return null;
+  const email = appUser.email || usernameToAuthEmail(appUser.username);
+  const authUser =
+    (await getSupabaseAuthUserById(appUser.authUserId)) ||
+    (await findSupabaseAuthUserByEmail(email)) ||
+    (await createSupabaseAuthUser(appUser, password));
+
+  if (!authUser?.id) {
+    throw new Error("No se pudo ubicar el usuario en Supabase Auth.");
+  }
+
+  const payload = await supabaseAuthRequest(`admin/users/${encodeURIComponent(authUser.id)}`, {
+    method: "PUT",
+    admin: true,
+    body: { password },
+  });
+  return payload?.user || payload || authUser;
 }
 
 async function ensureSupabaseAuthUsers(db) {
@@ -572,6 +617,14 @@ function createSession(session) {
   return sessionId;
 }
 
+function revokeAppSessionsForUser(userId, keepSessionId = null) {
+  for (const [sessionId, session] of sessions.entries()) {
+    if (sessionId !== keepSessionId && session?.userId === userId) {
+      sessions.delete(sessionId);
+    }
+  }
+}
+
 function getSignedSession(req) {
   const cookies = parseCookies(req);
   const value = cookies[SESSION_COOKIE_NAME];
@@ -680,6 +733,47 @@ function validateName(value, label) {
   if (!name) throw new Error(`${label} es obligatorio.`);
   if (name.length > 80) throw new Error(`${label} no puede superar 80 caracteres.`);
   return name;
+}
+
+function validatePassword(value) {
+  const password = String(value || "");
+  if (!password) throw new Error("La nueva contraseña es obligatoria.");
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    throw new Error(`La nueva contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`);
+  }
+  if (password.length > PASSWORD_MAX_LENGTH) {
+    throw new Error(`La nueva contraseña no puede superar ${PASSWORD_MAX_LENGTH} caracteres.`);
+  }
+  if (password.trim() !== password) {
+    throw new Error("La nueva contraseña no puede empezar ni terminar con espacios.");
+  }
+  return password;
+}
+
+function canSystemAdminChangePassword(actor, target) {
+  if (!actor || actor.role !== "system_admin") return false;
+  if (!target) return false;
+  if (target.role === "admin" || target.role === "juror") return true;
+  return target.role === "system_admin" && target.id === actor.id;
+}
+
+function passwordManagedUsers(db, actor) {
+  return db.users
+    .filter((item) => canSystemAdminChangePassword(actor, item))
+    .map(safeUser);
+}
+
+async function updateUserPassword(db, target, password) {
+  if (USE_SUPABASE_AUTH) {
+    const authUser = await updateSupabaseAuthPassword(target, password);
+    if (authUser?.id && target.authUserId !== authUser.id) {
+      target.authUserId = authUser.id;
+    }
+  }
+
+  const salt = crypto.randomBytes(16).toString("hex");
+  target.salt = salt;
+  target.passwordHash = hashPassword(password, salt);
 }
 
 function mergeLockedScores(existingScores, incomingScores, labels, candidate) {
@@ -1128,6 +1222,7 @@ async function handleApi(req, res) {
         payload.evaluations = db.evaluations;
       } else if (user.role === "system_admin") {
         payload.jurors = db.users.filter((item) => item.role === "juror").map(safeUser);
+        payload.passwordUsers = passwordManagedUsers(db, user);
         payload.evaluations = db.evaluations;
         payload.results = computeResults(db);
       }
@@ -1203,6 +1298,39 @@ async function handleApi(req, res) {
       await saveDb(db);
 
       sendJson(res, 200, { evaluation, results: user.role === "admin" ? computeResults(db) : undefined });
+      return;
+    }
+
+    if (req.method === "POST" && requestUrl.pathname.startsWith("/api/system/users/") && requestUrl.pathname.endsWith("/password")) {
+      if (user.role !== "system_admin") {
+        sendJson(res, 403, { error: "Solo el administrador del sistema puede cambiar contraseñas." });
+        return;
+      }
+      const parts = requestUrl.pathname.split("/");
+      const targetUserId = decodeURIComponent(parts[4] || "");
+      const target = db.users.find((item) => item.id === targetUserId);
+      if (!target) {
+        sendJson(res, 404, { error: "Usuario no encontrado." });
+        return;
+      }
+      if (!canSystemAdminChangePassword(user, target)) {
+        sendJson(res, 403, { error: "No puedes cambiar la contraseña de este usuario." });
+        return;
+      }
+
+      const body = await readRequestBody(req);
+      const password = validatePassword(body.password || body.newPassword);
+      await updateUserPassword(db, target, password);
+      const updatedAt = new Date().toISOString();
+      db.audit.push({
+        at: updatedAt,
+        userId: user.id,
+        action: target.id === user.id ? "update_own_password" : "update_user_password",
+      });
+      await saveDb(db);
+      const { sessionId } = getSignedSession(req);
+      revokeAppSessionsForUser(target.id, target.id === user.id ? sessionId : null);
+      sendJson(res, 200, { ok: true, user: safeUser(target) });
       return;
     }
 
