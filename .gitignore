@@ -1,0 +1,6 @@
+node_modules/
+.env
+data/database.json
+data/*.tmp
+data/*.backup
+data/*.codex-*

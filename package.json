@@ -1,0 +1,13 @@
+{
+  "name": "concurso-jurados",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema web de calificacion para jurados.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
