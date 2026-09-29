@@ -93,7 +93,8 @@ SUPABASE_SERVICE_ROLE_KEY=eyJxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 Render también puede leer el archivo `render.yaml`, dejando `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` y `SUPABASE_SECRET_KEY` para llenarlas desde el panel.
-`SUPABASE_SECRET_KEY` puede ser una llave nueva de Supabase con formato `sb_secret_...`. `SUPABASE_SERVICE_ROLE_KEY` es la llave `service_role` legacy que necesita Supabase Auth Admin para crear usuarios Auth desde el servidor. No subas ninguna llave real al repositorio.
+`SUPABASE_SERVICE_ROLE_KEY` es la llave `service_role` legacy que necesita Supabase Auth Admin para crear usuarios Auth desde el servidor y, si está presente, la app la usa para escrituras protegidas por RLS. `SUPABASE_SECRET_KEY` puede ser una llave nueva de Supabase con formato `sb_secret_...` y queda como respaldo para acceso de servidor. No subas ninguna llave real al repositorio.
+En producción, `SUPABASE_SEED_AUTH_USERS=false` evita recrear usuarios de Supabase Auth en cada arranque cuando ya fueron creados.
 
 Para publicarlo:
 
