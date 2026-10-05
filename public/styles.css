@@ -710,6 +710,47 @@ select:focus {
   background: #fce0dc;
 }
 
+.corrections-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.correction-list {
+  display: grid;
+  gap: 10px;
+}
+
+.correction-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: white;
+}
+
+.correction-row > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.correction-row > div:first-child span,
+.correction-row-meta > span:last-child {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.correction-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
+}
+
 .admin-edit-form .checkbox-row {
   display: flex;
   align-items: center;
@@ -1084,6 +1125,15 @@ tbody tr:hover {
 
   .password-edit-form {
     grid-template-columns: 1fr;
+  }
+
+  .correction-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .correction-row-meta {
+    justify-content: flex-start;
   }
 }
 

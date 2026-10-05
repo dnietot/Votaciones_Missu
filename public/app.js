@@ -844,9 +844,16 @@ function renderSystemAdmin() {
           <div class="tabs">
             <button class="tab system-tab ${state.systemTab === "names" ? "active" : ""}" data-tab="names">Configuración</button>
             <button class="tab system-tab ${state.systemTab === "validation" ? "active" : ""}" data-tab="validation">Validación</button>
+            <button class="tab system-tab ${state.systemTab === "corrections" ? "active" : ""}" data-tab="corrections">Correcciones</button>
           </div>
         </div>
-        ${state.systemTab === "validation" ? renderSystemValidation(selected) : renderSystemSettings()}
+        ${
+          state.systemTab === "validation"
+            ? renderSystemValidation(selected)
+            : state.systemTab === "corrections"
+              ? renderSystemCorrections()
+              : renderSystemSettings()
+        }
       </main>
     </div>
   `;
@@ -904,6 +911,77 @@ function renderSystemSettings() {
       </div>
     </section>
   `;
+}
+
+function renderSystemCorrections() {
+  const rows = correctionRows();
+  return `
+    <section class="panel corrections-panel">
+      <div class="section-head">
+        <h2>Correcciones</h2>
+        <p>Borra una calificación individual para que el jurado pueda volver a registrarla.</p>
+      </div>
+      <p id="system-validation-message" class="save-message">${escapeHtml(state.systemValidationMessage)}</p>
+      <p id="system-validation-error" class="form-error" role="alert">${escapeHtml(state.systemValidationError)}</p>
+      ${
+        rows.length
+          ? `<div class="correction-list">${rows.map(correctionRowHtml).join("")}</div>`
+          : '<div class="empty-state">No hay calificaciones registradas para corregir.</div>'
+      }
+    </section>
+  `;
+}
+
+function correctionRows() {
+  return state.evaluations
+    .map((evaluation) => {
+      const candidate = state.candidates.find((item) => item.id === evaluation.candidateId);
+      const juror = state.jurors.find((item) => item.id === evaluation.jurorId);
+      if (!candidate || !juror) return null;
+      const accumulator = scoreAccumulator(candidate, evaluation.scores || {});
+      const activeKeys = activeJurorScoreMeta(candidate).map((criterion) => criterion.key);
+      const presentKeys = activeKeys.filter((key) => scoreValue(evaluation.scores?.[key]) !== null);
+      return {
+        evaluation,
+        candidate,
+        juror,
+        accumulator,
+        status: presentKeys.length === activeKeys.length
+          ? { label: "Completa", className: "done" }
+          : presentKeys.length > 0
+            ? { label: "Parcial", className: "partial" }
+            : { label: "Pendiente", className: "" },
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.candidate.order - b.candidate.order || a.juror.username.localeCompare(b.juror.username, "es"));
+}
+
+function correctionRowHtml(item) {
+  return `
+    <article class="correction-row">
+      <div>
+        <strong>${item.candidate.order}. ${escapeHtml(item.candidate.name)}</strong>
+        <span>${escapeHtml(item.juror.name)} · ${escapeHtml(item.juror.username)}</span>
+      </div>
+      <div class="correction-row-meta">
+        <span class="status-pill ${item.status.className}">${item.status.label}</span>
+        <strong>${formatNumber(item.accumulator.accumulated)} / ${formatNumber(item.accumulator.maxPoints, 0)}</strong>
+        <span>${formatCorrectionDate(item.evaluation.updatedAt)}</span>
+      </div>
+      ${deleteEvaluationButton(item.evaluation, item.juror, item.candidate)}
+    </article>
+  `;
+}
+
+function formatCorrectionDate(value) {
+  if (!value) return "Sin fecha";
+  return new Date(value).toLocaleString("es-CO", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function renderSystemValidation(selected) {
