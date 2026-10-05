@@ -18,6 +18,8 @@ const state = {
   systemTab: "names",
   adminResultMessage: "",
   adminResultError: "",
+  systemValidationMessage: "",
+  systemValidationError: "",
 };
 
 const TOP10_LIMIT = 10;
@@ -557,6 +559,8 @@ function renderSystemValidation(selected) {
           <span>Total: ${formatNumber(result?.weightedTotal)}</span>
           <span>Jurados completos: ${result ? `${result.completedJurors}/${result.jurorCount}` : "-"}</span>
         </div>
+        <p id="system-validation-message" class="save-message">${escapeHtml(state.systemValidationMessage)}</p>
+        <p id="system-validation-error" class="form-error" role="alert">${escapeHtml(state.systemValidationError)}</p>
         ${validationTableHtml(selected)}
       </div>
     </section>
@@ -597,6 +601,7 @@ function validationTableHtml(candidate) {
             <th>Pregunta</th>
             <th>Acumulado</th>
             <th>Estado</th>
+            <th>Acción</th>
           </tr>
         </thead>
         <tbody>
@@ -637,7 +642,22 @@ function validationRowHtml(candidate, juror) {
       ${JUROR_SCORE_META.map((criterion) => validationScoreCell(candidate, scores, criterion)).join("")}
       <td><strong>${formatNumber(accumulator.accumulated)} / ${formatNumber(accumulator.maxPoints, 0)}</strong></td>
       <td><span class="status-pill ${status.className}">${status.label}</span></td>
+      <td>${evaluation ? deleteEvaluationButton(evaluation, juror, candidate) : '<span class="muted-cell">Sin registro</span>'}</td>
     </tr>
+  `;
+}
+
+function deleteEvaluationButton(evaluation, juror, candidate) {
+  return `
+    <button
+      type="button"
+      class="delete-evaluation-button"
+      data-evaluation-id="${escapeHtml(evaluation.id)}"
+      data-juror-name="${escapeHtml(juror.name)}"
+      data-candidate-name="${escapeHtml(candidate.name)}"
+    >
+      Borrar
+    </button>
   `;
 }
 
@@ -703,6 +723,36 @@ function bindSystemAdminEvents() {
   document.querySelectorAll(".system-validation-candidate").forEach((button) => {
     button.addEventListener("click", () => {
       state.selectedSystemCandidateId = button.dataset.candidateId;
+      state.systemValidationMessage = "";
+      state.systemValidationError = "";
+      renderSystemAdmin();
+    });
+  });
+
+  document.querySelectorAll(".delete-evaluation-button").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const jurorName = button.dataset.jurorName || "este jurado";
+      const candidateName = button.dataset.candidateName || "esta candidata";
+      const confirmed = window.confirm(
+        `Se borrará la calificación de ${jurorName} para ${candidateName}. El jurado podrá volver a calificarla.`,
+      );
+      if (!confirmed) return;
+
+      button.disabled = true;
+      state.systemValidationMessage = "";
+      state.systemValidationError = "";
+
+      try {
+        const payload = await api(`/api/system/evaluations/${encodeURIComponent(button.dataset.evaluationId)}`, {
+          method: "DELETE",
+        });
+        state.evaluations = state.evaluations.filter((evaluation) => evaluation.id !== payload.evaluationId);
+        state.results = sortedResults(payload.results);
+        state.systemValidationMessage = "Calificación borrada. El jurado puede volver a registrarla.";
+      } catch (caught) {
+        state.systemValidationError = caught.message;
+      }
+
       renderSystemAdmin();
     });
   });

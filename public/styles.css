@@ -695,6 +695,21 @@ select:focus {
   background: #80291f;
 }
 
+.delete-evaluation-button {
+  min-height: 30px;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: #fff1ef;
+  color: #a2392e;
+  border: 1px solid #efc4bd;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.delete-evaluation-button:hover {
+  background: #fce0dc;
+}
+
 .admin-edit-form .checkbox-row {
   display: flex;
   align-items: center;
@@ -792,7 +807,7 @@ tbody tr:hover {
 }
 
 .validation-table {
-  min-width: 940px;
+  min-width: 1040px;
 }
 
 .muted-cell,

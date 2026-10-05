@@ -967,6 +967,23 @@ async function resetResultsForTesting(db, user) {
   await saveDb(db);
 }
 
+async function deleteEvaluationForCorrection(db, evaluation, user) {
+  db.evaluations = db.evaluations.filter((item) => item.id !== evaluation.id);
+  const deletedAt = new Date().toISOString();
+  db.audit.push({
+    at: deletedAt,
+    userId: user.id,
+    action: "delete_evaluation_for_correction",
+    candidateId: evaluation.candidateId,
+  });
+
+  if (USE_SUPABASE) {
+    await supabaseDelete("evaluations", `?id=eq.${encodeURIComponent(evaluation.id)}`);
+  }
+
+  await saveDb(db);
+}
+
 async function getArcgisToken() {
   const username = process.env.ARCGIS_USERNAME;
   const password = process.env.ARCGIS_PASSWORD;
@@ -1331,6 +1348,27 @@ async function handleApi(req, res) {
       const { sessionId } = getSignedSession(req);
       revokeAppSessionsForUser(target.id, target.id === user.id ? sessionId : null);
       sendJson(res, 200, { ok: true, user: safeUser(target) });
+      return;
+    }
+
+    if (req.method === "DELETE" && requestUrl.pathname.startsWith("/api/system/evaluations/")) {
+      if (user.role !== "system_admin") {
+        sendJson(res, 403, { error: "Solo el administrador del sistema puede borrar calificaciones." });
+        return;
+      }
+      const evaluationId = decodeURIComponent(requestUrl.pathname.split("/").pop() || "");
+      const evaluation = db.evaluations.find((item) => item.id === evaluationId);
+      if (!evaluation) {
+        sendJson(res, 404, { error: "Calificación no encontrada." });
+        return;
+      }
+
+      await deleteEvaluationForCorrection(db, evaluation, user);
+      sendJson(res, 200, {
+        ok: true,
+        evaluationId,
+        results: computeResults(db),
+      });
       return;
     }
 
