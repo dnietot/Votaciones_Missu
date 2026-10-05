@@ -50,6 +50,7 @@ const TOP5_LIMIT = 5;
 const DEFAULT_CREDENTIALS = {
   admin: "admin2026",
   sistema: "sistema2026",
+  tablero: "tablero2026",
   jurado1: "jurado1",
   jurado2: "jurado2",
   jurado3: "jurado3",
@@ -102,6 +103,7 @@ function defaultDatabase() {
       "system_admin",
       DEFAULT_CREDENTIALS.sistema,
     ),
+    makeUser("tablero", "tablero", "Tablero en vivo", "viewer", DEFAULT_CREDENTIALS.tablero),
   ];
 
   for (let index = 1; index <= 6; index += 1) {
@@ -141,18 +143,18 @@ function defaultDatabase() {
 
 function ensureDefaultAppUsers(db) {
   let changed = false;
-  if (!db.users.some((user) => user.id === "sistema" || user.username === "sistema")) {
-    db.users.push(
-      makeUser(
-        "sistema",
-        "sistema",
-        "Administrador del sistema",
-        "system_admin",
-        DEFAULT_CREDENTIALS.sistema,
-      ),
-    );
-    changed = true;
-  }
+  const requiredUsers = [
+    ["sistema", "sistema", "Administrador del sistema", "system_admin", DEFAULT_CREDENTIALS.sistema],
+    ["tablero", "tablero", "Tablero en vivo", "viewer", DEFAULT_CREDENTIALS.tablero],
+  ];
+
+  requiredUsers.forEach(([id, username, name, role, password]) => {
+    if (!db.users.some((user) => user.id === id || user.username === username)) {
+      db.users.push(makeUser(id, username, name, role, password));
+      changed = true;
+    }
+  });
+
   return changed;
 }
 
@@ -326,7 +328,8 @@ async function updateSupabaseAuthPassword(appUser, password) {
 }
 
 async function ensureSupabaseAuthUsers(db) {
-  if (!USE_SUPABASE_AUTH || process.env.SUPABASE_SEED_AUTH_USERS === "false") return false;
+  if (!USE_SUPABASE_AUTH) return false;
+  const seedAuthUsers = process.env.SUPABASE_SEED_AUTH_USERS !== "false";
   let changed = false;
 
   for (const appUser of db.users) {
@@ -338,8 +341,12 @@ async function ensureSupabaseAuthUsers(db) {
 
     const defaultPassword = DEFAULT_CREDENTIALS[appUser.username];
     if (!defaultPassword) continue;
+    if (!seedAuthUsers && appUser.authUserId) continue;
 
-    const authUser = await createSupabaseAuthUser(appUser, defaultPassword);
+    const authUser =
+      (appUser.authUserId ? await getSupabaseAuthUserById(appUser.authUserId) : null) ||
+      (await findSupabaseAuthUserByEmail(email)) ||
+      (await createSupabaseAuthUser(appUser, defaultPassword));
     if (authUser?.id && appUser.authUserId !== authUser.id) {
       appUser.authUserId = authUser.id;
       changed = true;
@@ -753,7 +760,7 @@ function validatePassword(value) {
 function canSystemAdminChangePassword(actor, target) {
   if (!actor || actor.role !== "system_admin") return false;
   if (!target) return false;
-  if (target.role === "admin" || target.role === "juror") return true;
+  if (target.role === "admin" || target.role === "juror" || target.role === "viewer") return true;
   return target.role === "system_admin" && target.id === actor.id;
 }
 
@@ -1242,6 +1249,10 @@ async function handleApi(req, res) {
         payload.passwordUsers = passwordManagedUsers(db, user);
         payload.evaluations = db.evaluations;
         payload.results = computeResults(db);
+      } else if (user.role === "viewer") {
+        payload.jurors = db.users.filter((item) => item.role === "juror").map(safeUser);
+        payload.evaluations = db.evaluations;
+        payload.results = computeResults(db);
       }
 
       sendJson(res, 200, payload);
@@ -1249,8 +1260,8 @@ async function handleApi(req, res) {
     }
 
     if (req.method === "GET" && requestUrl.pathname === "/api/results") {
-      if (user.role !== "admin") {
-        sendJson(res, 403, { error: "Solo la organización puede ver resultados generales." });
+      if (user.role !== "admin" && user.role !== "viewer") {
+        sendJson(res, 403, { error: "Solo la organización o el tablero pueden ver resultados generales." });
         return;
       }
       sendJson(res, 200, { results: computeResults(db) });

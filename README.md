@@ -8,6 +8,7 @@ Aplicación web para calificar 20 candidatas con 6 jurados. Puede funcionar loca
 
 - Organización: `admin` / `admin2026`
 - Administrador del sistema: `sistema` / `sistema2026`
+- Tablero en vivo: `tablero` / `tablero2026`
 - Jurados: `jurado1` / `jurado1`, `jurado2` / `jurado2`, hasta `jurado6` / `jurado6`
 
 ## Pesos
@@ -27,7 +28,8 @@ Aplicación web para calificar 20 candidatas con 6 jurados. Puede funcionar loca
 - Si una candidata pasa a Top 10 o Top 5, se habilita solo el criterio nuevo de esa etapa.
 - Los resultados generales solo son visibles para la organización.
 - La organización registra el puntaje adicional de comportamiento y controla Top 10 / Top 5.
-- El administrador del sistema solo cambia nombres de jurados y candidatas.
+- El tablero en vivo es un usuario de solo lectura para ver ranking, categorías y detalle por candidata con actualización automática.
+- El administrador del sistema cambia nombres de jurados y candidatas, administra contraseñas, valida calificaciones y puede borrar registros individuales cuando un jurado se equivoca.
 - El administrador del sistema puede borrar resultados de prueba: elimina calificaciones y reinicia comportamiento / Top 10 / Top 5, conservando nombres y usuarios.
 
 ## Ejecutar
@@ -59,6 +61,7 @@ La primera vez que la app se conecte a Supabase, creará automáticamente los pe
 
 - `admin`
 - `sistema`
+- `tablero`
 - `jurado1` a `jurado6`
 - `Candidata 1` a `Candidata 20`
 

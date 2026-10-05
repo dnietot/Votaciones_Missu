@@ -4,7 +4,7 @@ create table if not exists public.app_users (
   email text unique,
   auth_user_id uuid unique,
   name text not null,
-  role text not null check (role in ('admin', 'system_admin', 'juror')),
+  role text not null check (role in ('admin', 'system_admin', 'juror', 'viewer')),
   salt text,
   password_hash text,
   created_at timestamptz not null
@@ -15,7 +15,7 @@ alter table public.app_users
 
 alter table public.app_users
   add constraint app_users_role_check
-  check (role in ('admin', 'system_admin', 'juror'));
+  check (role in ('admin', 'system_admin', 'juror', 'viewer'));
 
 alter table public.app_users
   add column if not exists email text;

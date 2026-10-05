@@ -1,5 +1,8 @@
 const app = document.querySelector("#app");
 const loginTemplate = document.querySelector("#login-template");
+const DASHBOARD_REFRESH_MS = 5000;
+
+let dashboardRefreshTimer = null;
 
 const state = {
   user: null,
@@ -13,13 +16,17 @@ const state = {
   selectedCandidateId: null,
   selectedAdminCandidateId: null,
   selectedSystemCandidateId: null,
+  selectedViewerCandidateId: null,
   search: "",
   adminTab: "results",
   systemTab: "names",
+  viewerTab: "ranking",
   adminResultMessage: "",
   adminResultError: "",
   systemValidationMessage: "",
   systemValidationError: "",
+  dashboardUpdatedAt: "",
+  dashboardError: "",
 };
 
 const TOP10_LIMIT = 10;
@@ -45,6 +52,7 @@ function formatNumber(value, digits = 2) {
 function roleLabel(role) {
   if (role === "admin") return "Organización";
   if (role === "system_admin") return "Administrador del sistema";
+  if (role === "viewer") return "Tablero en vivo";
   return "Jurado";
 }
 
@@ -96,6 +104,11 @@ const JUROR_SCORE_META = [
   { key: "swimsuit", label: "Traje de baño", weight: 20 },
   { key: "speech", label: "Speech Top 10", weight: 5, requires: "isTop10" },
   { key: "finalQuestion", label: "Pregunta final Top 5", weight: 5, requires: "isTop5" },
+];
+
+const DASHBOARD_CATEGORY_META = [
+  ...JUROR_SCORE_META,
+  { key: "behavior", label: "Comportamiento", weight: 15 },
 ];
 
 function requiredKeys(candidate) {
@@ -176,6 +189,9 @@ function selectDefaultCandidate() {
   if (!state.selectedSystemCandidateId && state.candidates.length) {
     state.selectedSystemCandidateId = state.candidates[0].id;
   }
+  if (!state.selectedViewerCandidateId && state.candidates.length) {
+    state.selectedViewerCandidateId = state.candidates[0].id;
+  }
 }
 
 async function loadApp() {
@@ -183,6 +199,7 @@ async function loadApp() {
     const payload = await api("/api/bootstrap");
     Object.assign(state, payload);
     state.results = sortedResults(state.results);
+    state.dashboardUpdatedAt = new Date().toISOString();
     selectDefaultCandidate();
     renderApp();
   } catch (error) {
@@ -214,6 +231,37 @@ function renderLogin() {
   });
 }
 
+function stopDashboardAutoRefresh() {
+  if (!dashboardRefreshTimer) return;
+  clearInterval(dashboardRefreshTimer);
+  dashboardRefreshTimer = null;
+}
+
+function ensureDashboardAutoRefresh() {
+  if (dashboardRefreshTimer) return;
+  dashboardRefreshTimer = setInterval(refreshDashboardData, DASHBOARD_REFRESH_MS);
+}
+
+async function refreshDashboardData() {
+  if (state.user?.role !== "viewer") {
+    stopDashboardAutoRefresh();
+    return;
+  }
+
+  try {
+    const payload = await api("/api/bootstrap");
+    Object.assign(state, payload);
+    state.results = sortedResults(state.results);
+    state.dashboardUpdatedAt = new Date().toISOString();
+    state.dashboardError = "";
+    selectDefaultCandidate();
+  } catch (caught) {
+    state.dashboardError = caught.message;
+  }
+
+  renderViewerDashboard();
+}
+
 function topbarHtml() {
   return `
     <header class="topbar">
@@ -234,14 +282,21 @@ function topbarHtml() {
 
 function renderApp() {
   if (state.user.role === "admin") {
+    stopDashboardAutoRefresh();
     renderAdmin();
   } else if (state.user.role === "system_admin") {
+    stopDashboardAutoRefresh();
     renderSystemAdmin();
+  } else if (state.user.role === "viewer") {
+    renderViewerDashboard();
+    return;
   } else {
+    stopDashboardAutoRefresh();
     renderJuror();
   }
 
   document.querySelector("#logout-button")?.addEventListener("click", async () => {
+    stopDashboardAutoRefresh();
     await api("/api/logout", { method: "POST", body: "{}" });
     renderLogin();
   });
@@ -266,6 +321,311 @@ function renderCandidateList(candidates, selectedId, admin = false) {
       `;
     })
     .join("");
+}
+
+function renderViewerDashboard() {
+  ensureDashboardAutoRefresh();
+  const rows = sortedResults();
+  const selected =
+    state.candidates.find((candidate) => candidate.id === state.selectedViewerCandidateId) || state.candidates[0];
+  const counts = stageCounts(rows);
+  const totalCompleted = rows.reduce((sum, result) => sum + Number(result.completedJurors || 0), 0);
+  const totalExpected = rows.reduce((sum, result) => sum + Number(result.jurorCount || 0), 0);
+  const completionPercent = totalExpected ? Math.round((totalCompleted / totalExpected) * 1000) / 10 : 0;
+
+  app.innerHTML = `
+    <div class="app-shell dashboard-shell">
+      ${topbarHtml()}
+      <main class="main dashboard-main">
+        <section class="dashboard-hero">
+          <div>
+            <h1>Tablero de votaciones</h1>
+            <p>Vista en vivo de resultados, categorías y candidatas.</p>
+          </div>
+          <div class="live-status">
+            <span class="live-dot"></span>
+            <strong>En vivo</strong>
+            <span>${formatDashboardTime(state.dashboardUpdatedAt)}</span>
+          </div>
+        </section>
+        <section class="metric-strip">
+          ${metricCard("Candidatas", rows.length)}
+          ${metricCard("Top 10", `${counts.top10}/${TOP10_LIMIT}`)}
+          ${metricCard("Top 5", `${counts.top5}/${TOP5_LIMIT}`)}
+          ${metricCard("Avance jurados", `${formatNumber(completionPercent, 1)}%`)}
+        </section>
+        <div class="toolbar dashboard-toolbar">
+          <div class="tabs">
+            <button class="tab viewer-tab ${state.viewerTab === "ranking" ? "active" : ""}" data-tab="ranking">Ranking</button>
+            <button class="tab viewer-tab ${state.viewerTab === "categories" ? "active" : ""}" data-tab="categories">Categorías</button>
+            <button class="tab viewer-tab ${state.viewerTab === "candidate" ? "active" : ""}" data-tab="candidate">Candidata</button>
+          </div>
+        </div>
+        ${state.dashboardError ? `<p class="form-error" role="alert">${escapeHtml(state.dashboardError)}</p>` : ""}
+        ${
+          state.viewerTab === "categories"
+            ? renderViewerCategories(rows)
+            : state.viewerTab === "candidate"
+              ? renderViewerCandidate(selected, rows)
+              : renderViewerRanking(rows)
+        }
+      </main>
+    </div>
+  `;
+
+  bindViewerDashboardEvents();
+}
+
+function metricCard(label, value) {
+  return `
+    <div class="metric-card">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `;
+}
+
+function formatDashboardTime(value) {
+  if (!value) return "Actualizando";
+  return new Date(value).toLocaleTimeString("es-CO", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function renderViewerRanking(rows) {
+  return `
+    <section class="results-panel dashboard-panel">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Puesto</th>
+              <th>Candidata</th>
+              <th>Etapa</th>
+              <th>Total</th>
+              <th>Entrevista</th>
+              <th>Gala</th>
+              <th>Traje</th>
+              <th>Speech</th>
+              <th>Pregunta</th>
+              <th>Comport.</th>
+              <th>Jurados</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(viewerRankingRow).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function viewerRankingRow(result) {
+  return `
+    <tr>
+      <td><span class="rank">${result.rank}</span></td>
+      <td><strong>${escapeHtml(result.candidateName)}</strong></td>
+      <td><span class="badge-row">${candidateBadges(result) || '<span class="badge">Preliminar</span>'}</span></td>
+      <td><strong>${formatNumber(result.weightedTotal)}</strong></td>
+      <td>${formatNumber(result.averages.interview)}</td>
+      <td>${formatNumber(result.averages.gala)}</td>
+      <td>${formatNumber(result.averages.swimsuit)}</td>
+      <td>${formatNumber(result.averages.speech)}</td>
+      <td>${formatNumber(result.averages.finalQuestion)}</td>
+      <td>${formatNumber(result.behaviorScore)}</td>
+      <td>${result.completedJurors}/${result.jurorCount}</td>
+    </tr>
+  `;
+}
+
+function renderViewerCategories(rows) {
+  return `
+    <section class="category-board-grid">
+      ${DASHBOARD_CATEGORY_META.map((category) => renderCategoryBoard(category, rows)).join("")}
+    </section>
+  `;
+}
+
+function renderCategoryBoard(category, rows) {
+  const leaders = rows
+    .map((result) => ({ result, value: categoryValue(result, category.key) }))
+    .filter((item) => item.value !== null)
+    .sort((a, b) => b.value - a.value || a.result.order - b.result.order)
+    .slice(0, 10);
+
+  return `
+    <article class="category-board">
+      <div class="category-board-head">
+        <h2>${escapeHtml(category.label)}</h2>
+        <span>${category.weight}%</span>
+      </div>
+      <div class="category-leaders">
+        ${
+          leaders.length
+            ? leaders.map((item, index) => categoryLeaderRow(item.result, item.value, index + 1)).join("")
+            : '<p class="muted-small">Sin calificaciones registradas.</p>'
+        }
+      </div>
+    </article>
+  `;
+}
+
+function categoryValue(result, key) {
+  if (key === "behavior") return scoreValue(result.behaviorScore);
+  return scoreValue(result.averages?.[key]);
+}
+
+function categoryLeaderRow(result, value, position) {
+  return `
+    <div class="category-leader-row">
+      <span>${position}</span>
+      <strong>${escapeHtml(result.candidateName)}</strong>
+      <em>${formatNumber(value)}</em>
+    </div>
+  `;
+}
+
+function renderViewerCandidate(selected, rows) {
+  if (!selected) return '<div class="empty-state">No hay candidatas.</div>';
+  const result = rows.find((item) => item.candidateId === selected.id);
+  return `
+    <section class="viewer-candidate-grid">
+      <div class="panel">
+        <div class="section-head">
+          <h2>Candidatas</h2>
+          <p>Ranking actual por candidata.</p>
+        </div>
+        <div class="admin-candidate-list">
+          ${rows.map((item) => viewerCandidateButton(item, selected.id)).join("")}
+        </div>
+      </div>
+      <div class="panel viewer-candidate-panel">
+        <div class="candidate-head">
+          <div>
+            <h1>${escapeHtml(selected.name)}</h1>
+            <p>Puesto ${result?.rank ?? "-"} · Total ${formatNumber(result?.weightedTotal)}</p>
+          </div>
+          <div class="badge-row">${candidateBadges(selected) || '<span class="badge">Preliminar</span>'}</div>
+        </div>
+        <div class="stage-summary">
+          <span>Jurados completos: ${result ? `${result.completedJurors}/${result.jurorCount}` : "-"}</span>
+          <span>Peso activo: ${formatNumber((result?.expectedWeight || 0) * 100, 0)}%</span>
+          <span>Disponible: ${formatNumber((result?.availableWeight || 0) * 100, 0)}%</span>
+        </div>
+        <div class="candidate-score-grid">
+          ${viewerScoreTile("Entrevista", result?.averages.interview, "30%")}
+          ${viewerScoreTile("Gala", result?.averages.gala, "25%")}
+          ${viewerScoreTile("Traje de baño", result?.averages.swimsuit, "20%")}
+          ${viewerScoreTile("Speech Top 10", result?.averages.speech, "5%")}
+          ${viewerScoreTile("Pregunta final", result?.averages.finalQuestion, "5%")}
+          ${viewerScoreTile("Comportamiento", result?.behaviorScore, "15%")}
+        </div>
+        ${viewerCandidateJurorTable(selected)}
+      </div>
+    </section>
+  `;
+}
+
+function viewerCandidateButton(result, selectedId) {
+  return `
+    <button class="candidate-button viewer-candidate-button ${result.candidateId === selectedId ? "active" : ""}" data-candidate-id="${escapeHtml(result.candidateId)}">
+      <strong>${result.rank}. ${escapeHtml(result.candidateName)}</strong>
+      <span class="candidate-row-meta">
+        <span>Total ${formatNumber(result.weightedTotal)}</span>
+        <span>${result.completedJurors}/${result.jurorCount} jurados</span>
+      </span>
+      <span class="badge-row">${candidateBadges(result)}</span>
+    </button>
+  `;
+}
+
+function viewerScoreTile(label, value, weight) {
+  return `
+    <div class="viewer-score-tile">
+      <span>${escapeHtml(label)}</span>
+      <strong>${formatNumber(value)}</strong>
+      <em>${escapeHtml(weight)}</em>
+    </div>
+  `;
+}
+
+function viewerCandidateJurorTable(candidate) {
+  return `
+    <div class="table-wrap validation-table-wrap">
+      <table class="validation-table">
+        <thead>
+          <tr>
+            <th>Jurado</th>
+            <th>Entrevista</th>
+            <th>Gala</th>
+            <th>Traje</th>
+            <th>Speech</th>
+            <th>Pregunta</th>
+            <th>Acumulado</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${state.jurors
+            .slice()
+            .sort((a, b) => a.username.localeCompare(b.username, "es"))
+            .map((juror) => viewerJurorRow(candidate, juror))
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function viewerJurorRow(candidate, juror) {
+  const evaluation = evaluationForJurorCandidate(juror.id, candidate.id);
+  const scores = evaluation?.scores || {};
+  const accumulator = scoreAccumulator(candidate, scores);
+  const activeKeys = activeJurorScoreMeta(candidate).map((criterion) => criterion.key);
+  const presentKeys = activeKeys.filter((key) => scoreValue(scores[key]) !== null);
+  const status = presentKeys.length === activeKeys.length
+    ? { label: "Completa", className: "done" }
+    : presentKeys.length > 0
+      ? { label: "Parcial", className: "partial" }
+      : { label: "Pendiente", className: "" };
+
+  return `
+    <tr>
+      <td>
+        <strong>${escapeHtml(juror.name)}</strong>
+        <div class="muted-small">${escapeHtml(juror.username)}</div>
+      </td>
+      ${JUROR_SCORE_META.map((criterion) => validationScoreCell(candidate, scores, criterion)).join("")}
+      <td><strong>${formatNumber(accumulator.accumulated)} / ${formatNumber(accumulator.maxPoints, 0)}</strong></td>
+      <td><span class="status-pill ${status.className}">${status.label}</span></td>
+    </tr>
+  `;
+}
+
+function bindViewerDashboardEvents() {
+  document.querySelector("#logout-button")?.addEventListener("click", async () => {
+    stopDashboardAutoRefresh();
+    await api("/api/logout", { method: "POST", body: "{}" });
+    renderLogin();
+  });
+
+  document.querySelectorAll(".viewer-tab").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.viewerTab = button.dataset.tab;
+      state.dashboardError = "";
+      renderViewerDashboard();
+    });
+  });
+
+  document.querySelectorAll(".viewer-candidate-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selectedViewerCandidateId = button.dataset.candidateId;
+      renderViewerDashboard();
+    });
+  });
 }
 
 function renderJuror() {
@@ -668,7 +1028,7 @@ function validationScoreCell(candidate, scores, criterion) {
 }
 
 function passwordManagedRows() {
-  const roleOrder = { system_admin: 0, admin: 1, juror: 2 };
+  const roleOrder = { system_admin: 0, admin: 1, viewer: 2, juror: 3 };
   return (state.passwordUsers || [])
     .slice()
     .sort((a, b) => (roleOrder[a.role] ?? 9) - (roleOrder[b.role] ?? 9) || a.username.localeCompare(b.username, "es"))
