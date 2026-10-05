@@ -290,9 +290,12 @@ function renderApp() {
   } else if (state.user.role === "viewer") {
     renderViewerDashboard();
     return;
-  } else {
+  } else if (state.user.role === "juror") {
     stopDashboardAutoRefresh();
     renderJuror();
+  } else {
+    stopDashboardAutoRefresh();
+    renderUnsupportedRole();
   }
 
   document.querySelector("#logout-button")?.addEventListener("click", async () => {
@@ -300,6 +303,17 @@ function renderApp() {
     await api("/api/logout", { method: "POST", body: "{}" });
     renderLogin();
   });
+}
+
+function renderUnsupportedRole() {
+  app.innerHTML = `
+    <div class="app-shell">
+      ${topbarHtml()}
+      <main class="main">
+        <div class="empty-state">Este usuario no tiene una vista asignada.</div>
+      </main>
+    </div>
+  `;
 }
 
 function renderCandidateList(candidates, selectedId, admin = false) {

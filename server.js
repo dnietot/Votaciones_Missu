@@ -1152,6 +1152,7 @@ function serveStatic(req, res) {
   res.writeHead(200, {
     "Content-Type": mimeTypes[extension] || "application/octet-stream",
     "Content-Length": content.length,
+    "Cache-Control": "no-store, max-age=0",
   });
   res.end(content);
 }
