@@ -330,6 +330,7 @@ function blockInvalidScoreKey(event) {
 }
 
 function bindScoreInputGuards(root = document) {
+  if (!root) return;
   root.querySelectorAll(".score-value-input").forEach((input) => {
     if (input.dataset.scoreGuardBound) return;
     input.dataset.scoreGuardBound = "true";
