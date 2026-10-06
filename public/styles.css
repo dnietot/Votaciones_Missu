@@ -73,6 +73,18 @@ button:disabled {
   margin-bottom: 16px;
 }
 
+.login-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.login-panel-head .brand-mark {
+  margin-bottom: 0;
+}
+
 h1,
 h2,
 h3,
@@ -213,6 +225,23 @@ select:focus {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.language-toggle {
+  min-width: 46px;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 10px;
+  background: var(--soft);
+  color: var(--ink);
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.language-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent-dark);
 }
 
 .ghost-button {

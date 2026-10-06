@@ -14,6 +14,8 @@ Aplicacion web para calificar 20 candidatas con 5 jurados, administracion, admin
 - El administrador del sistema cambia nombres, actualiza contrasenas, valida calificaciones por candidata y elimina registros individuales cuando un jurado se equivoca.
 - El tablero en vivo es de solo lectura y muestra ranking, categorias y detalle por candidata con actualizacion automatica.
 - El sistema esta limitado a 5 jurados: `jurado1` a `jurado5`. `jurado6` queda retirado y se limpia si existe en datos anteriores.
+- La interfaz permite cambiar entre espanol e ingles desde el boton `ES/EN`; la preferencia queda guardada en el navegador.
+- Los campos de calificacion aceptan numeros decimales con punto o coma, pero bloquean letras y notacion cientifica como `1e2`.
 
 ## Accesos de prueba
 
@@ -117,8 +119,10 @@ Tambien existe `availableTotal` en `server.js:976`, que normaliza solo sobre el 
 - Top 10 maximo 10 y Top 5 maximo 5: `assertCandidateStageLimits()` en `server.js:890`.
 - Top 5 implica Top 10: `normalizeCandidateStages()` en `server.js:883`.
 - Resultados ordenados de mayor a menor: `computeResults()` ordena por `weightedTotal` en `server.js:983`; el frontend tambien protege el orden con `sortedResults()` en `public/app.js:95`.
-- Carga visual al guardar: `startJurorSaveFeedback()` en `public/app.js:816` y CSS del spinner en `public/styles.css:397`.
+- Carga visual al guardar: `startJurorSaveFeedback()` en `public/app.js:1066` y CSS del spinner en `public/styles.css:426`.
 - Solo 5 jurados: `JUROR_COUNT` esta en `server.js:30`; `RETIRED_USER_IDS` retira `jurado6` en `server.js:31`.
+- Cambio de idioma: `languageToggleHtml()` en `public/app.js:180` genera el boton `ES/EN`; `setLanguage()` en `public/app.js:170` guarda la preferencia en `localStorage`.
+- Entrada numerica: `bindScoreInputGuards()` en `public/app.js:332` bloquea teclas no numericas en el navegador y `validateScore()` en `server.js:784` rechaza valores invalidos en el servidor.
 
 ## Supabase
 
@@ -460,3 +464,5 @@ node --check public/app.js
 - Como sistema, validar calificaciones por candidata y eliminar una evaluacion individual de prueba.
 - Como tablero, confirmar que no se puede cargar votaciones y que solo muestra resultados.
 - Revisar que el total del ranking se interprete como `weightedTotal` normalizado, no como acumulado directo.
+- Probar el boton `ES/EN` en login, jurado, administracion, sistema y tablero.
+- Confirmar que los campos de calificacion no permitan escribir `e`, `+` ni `-`, y que la API rechace valores como `1e2`.

@@ -774,16 +774,23 @@ function readRequestBody(req) {
 
 function numberOrNull(value) {
   if (value === "" || value === null || value === undefined) return null;
-  const number = Number(value);
+  const normalized = String(value).trim().replace(",", ".");
+  if (!/^\d+(\.\d+)?$/.test(normalized)) return null;
+  const number = Number(normalized);
   if (!Number.isFinite(number)) return null;
   return Math.round(number * 100) / 100;
 }
 
 function validateScore(value, label, required = true) {
-  const score = numberOrNull(value);
-  if (score === null) {
+  const blank = value === "" || value === null || value === undefined;
+  if (blank) {
     if (required) throw new Error(`${label} es obligatorio.`);
     return null;
+  }
+
+  const score = numberOrNull(value);
+  if (score === null) {
+    throw new Error(`${label} debe ser un número de 1 a 100.`);
   }
   if (score < 1 || score > 100) {
     throw new Error(`${label} debe estar entre 1 y 100.`);
