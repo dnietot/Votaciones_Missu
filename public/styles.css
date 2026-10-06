@@ -394,6 +394,32 @@ select:focus {
   color: var(--accent-dark);
 }
 
+.score-form button.is-loading,
+.score-form button.is-saved {
+  opacity: 1;
+}
+
+.score-form button.is-loading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.button-spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+.score-form .mini-save .button-spinner {
+  border-color: rgba(17, 106, 123, 0.22);
+  border-top-color: var(--accent);
+}
+
 .locked-chip {
   min-height: 42px;
   display: inline-grid;
@@ -456,6 +482,29 @@ select:focus {
   color: var(--green);
   font-size: 13px;
   font-weight: 700;
+}
+
+.save-message.is-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.save-message.is-loading::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .locked-note {

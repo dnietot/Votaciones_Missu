@@ -683,13 +683,13 @@ function renderJuror() {
                   ${selected.isTop10 ? scoreField("speech", "Speech Top 10", scores.speech, 5) : ""}
                   ${selected.isTop5 ? scoreField("finalQuestion", "Pregunta final Top 5", scores.finalQuestion, 5) : ""}
                 </div>
-                <button type="submit" ${canSubmit ? "" : "disabled"}>${canSubmit ? "Guardar criterios llenos" : "Calificación cerrada"}</button>
+                <button id="score-submit-button" type="submit" ${canSubmit ? "" : "disabled"}>${canSubmit ? "Guardar criterios llenos" : "Calificación cerrada"}</button>
                 <p class="locked-note">${
                   canSubmit
                     ? "Puedes guardar un criterio por separado o varios a la vez. Todo criterio enviado queda bloqueado."
                     : "Esta candidata ya fue calificada en la etapa actual."
                 }</p>
-                <p id="save-message" class="save-message"></p>
+                <p id="save-message" class="save-message" aria-live="polite"></p>
                 <p id="score-error" class="form-error" role="alert"></p>
               </form>
             </section>
@@ -786,7 +786,10 @@ function bindJurorEvents(selected) {
     button.addEventListener("click", async () => {
       const key = button.dataset.scoreKey;
       const input = document.querySelector(`[name="${key}"]`);
-      await submitScores(selected, { [key]: input?.value ?? "" }, "Criterio guardado.");
+      await submitScores(selected, { [key]: input?.value ?? "" }, "Criterio guardado.", {
+        trigger: button,
+        loadingMessage: "Guardando criterio...",
+      });
     });
   });
 
@@ -803,15 +806,83 @@ function bindJurorEvents(selected) {
         .map((key) => [key, data.get(key)])
         .filter(([, value]) => value !== null && value !== ""),
     );
-    await submitScores(selected, scores, "Criterios guardados.");
+    await submitScores(selected, scores, "Criterios guardados.", {
+      trigger: form.querySelector("#score-submit-button"),
+      loadingMessage: "Guardando calificación...",
+    });
   });
 }
 
-async function submitScores(selected, scores, successMessage) {
+function startJurorSaveFeedback({ trigger, loadingMessage } = {}) {
+  const form = document.querySelector("#score-form");
+  const saveMessage = document.querySelector("#save-message");
+  if (!form) return;
+
+  form.classList.add("is-saving");
+  form.setAttribute("aria-busy", "true");
+  if (saveMessage) {
+    saveMessage.textContent = loadingMessage || "Guardando...";
+    saveMessage.classList.add("is-loading");
+  }
+
+  form.querySelectorAll("button, input").forEach((control) => {
+    if (!control.disabled) control.dataset.enabledBeforeSave = "true";
+    control.disabled = true;
+  });
+
+  if (trigger) {
+    trigger.dataset.originalHtml = trigger.innerHTML;
+    trigger.classList.add("is-loading");
+    trigger.innerHTML = '<span class="button-spinner" aria-hidden="true"></span><span>Guardando...</span>';
+  }
+}
+
+function restoreJurorSaveFeedback() {
+  const form = document.querySelector("#score-form");
+  const saveMessage = document.querySelector("#save-message");
+  if (!form) return;
+
+  form.classList.remove("is-saving");
+  form.removeAttribute("aria-busy");
+  if (saveMessage) {
+    saveMessage.classList.remove("is-loading");
+  }
+
+  form.querySelectorAll("[data-enabled-before-save]").forEach((control) => {
+    control.disabled = false;
+    delete control.dataset.enabledBeforeSave;
+  });
+
+  form.querySelectorAll("button[data-original-html]").forEach((button) => {
+    button.innerHTML = button.dataset.originalHtml;
+    delete button.dataset.originalHtml;
+    button.classList.remove("is-loading", "is-saved");
+  });
+}
+
+function completeJurorSaveFeedback(trigger) {
+  const form = document.querySelector("#score-form");
+  const saveMessage = document.querySelector("#save-message");
+  if (form) {
+    form.classList.remove("is-saving");
+    form.removeAttribute("aria-busy");
+  }
+  if (saveMessage) {
+    saveMessage.classList.remove("is-loading");
+  }
+  if (trigger) {
+    trigger.classList.remove("is-loading");
+    trigger.classList.add("is-saved");
+    trigger.innerHTML = "Guardado";
+  }
+}
+
+async function submitScores(selected, scores, successMessage, feedbackOptions = {}) {
   const saveMessage = document.querySelector("#save-message");
   const error = document.querySelector("#score-error");
   saveMessage.textContent = "";
   error.textContent = "";
+  startJurorSaveFeedback(feedbackOptions);
 
   try {
     const payload = await api("/api/evaluations", {
@@ -827,8 +898,10 @@ async function submitScores(selected, scores, successMessage) {
     saveMessage.textContent = payload.evaluation.arcgis?.status === "error"
       ? "Guardada localmente. ArcGIS quedó pendiente."
       : successMessage;
+    completeJurorSaveFeedback(feedbackOptions.trigger);
     setTimeout(() => renderJuror(), 900);
   } catch (caught) {
+    restoreJurorSaveFeedback();
     error.textContent = caught.message;
   }
 }
