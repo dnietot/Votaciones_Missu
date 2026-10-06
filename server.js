@@ -27,6 +27,8 @@ const SESSION_REFRESH_WINDOW_SECONDS = 60 * 5;
 const COOKIE_SECURE = process.env.COOKIE_SECURE === "true" || PUBLIC_URL.startsWith("https://");
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_LENGTH = 128;
+const JUROR_COUNT = 5;
+const RETIRED_USER_IDS = new Set(["jurado6"]);
 
 const WEIGHTS = {
   interview: 0.3,
@@ -56,7 +58,6 @@ const DEFAULT_CREDENTIALS = {
   jurado3: "jurado3",
   jurado4: "jurado4",
   jurado5: "jurado5",
-  jurado6: "jurado6",
 };
 
 const sessions = new Map();
@@ -106,7 +107,7 @@ function defaultDatabase() {
     makeUser("tablero", "tablero", "Tablero en vivo", "viewer", DEFAULT_CREDENTIALS.tablero),
   ];
 
-  for (let index = 1; index <= 6; index += 1) {
+  for (let index = 1; index <= JUROR_COUNT; index += 1) {
     users.push(
       makeUser(
         `jurado${index}`,
@@ -156,6 +157,22 @@ function ensureDefaultAppUsers(db) {
   });
 
   return changed;
+}
+
+function retiredAppUsers(db) {
+  return db.users.filter((user) => RETIRED_USER_IDS.has(user.id) || RETIRED_USER_IDS.has(user.username));
+}
+
+function pruneRetiredAppUsers(db) {
+  const retiredIds = new Set(retiredAppUsers(db).map((user) => user.id));
+  RETIRED_USER_IDS.forEach((id) => retiredIds.add(id));
+
+  const userCount = db.users.length;
+  const evaluationCount = db.evaluations.length;
+  db.users = db.users.filter((user) => !retiredIds.has(user.id) && !retiredIds.has(user.username));
+  db.evaluations = db.evaluations.filter((evaluation) => !retiredIds.has(evaluation.jurorId));
+
+  return db.users.length !== userCount || db.evaluations.length !== evaluationCount;
 }
 
 function isSupabasePlatformApiKey(key) {
@@ -356,6 +373,38 @@ async function ensureSupabaseAuthUsers(db) {
   return changed;
 }
 
+async function deleteSupabaseAuthUser(appUser) {
+  if (!USE_SUPABASE_AUTH) return;
+
+  try {
+    const email = appUser.email || usernameToAuthEmail(appUser.username);
+    const authUser =
+      (appUser.authUserId ? await getSupabaseAuthUserById(appUser.authUserId) : null) ||
+      (await findSupabaseAuthUserByEmail(email));
+    if (!authUser?.id) return;
+
+    await supabaseAuthRequest(`admin/users/${encodeURIComponent(authUser.id)}`, {
+      method: "DELETE",
+      admin: true,
+    });
+  } catch (error) {
+    console.warn(`No se pudo eliminar ${appUser.username} de Supabase Auth: ${error.message}`);
+  }
+}
+
+async function cleanupRetiredSupabaseUsers(users) {
+  for (const user of users) {
+    try {
+      await supabaseDelete("evaluations", `?juror_id=eq.${encodeURIComponent(user.id)}`);
+      await supabaseDelete("app_users", `?id=eq.${encodeURIComponent(user.id)}`);
+    } catch (error) {
+      console.warn(`No se pudo eliminar ${user.username} de Supabase: ${error.message}`);
+    }
+
+    await deleteSupabaseAuthUser(user);
+  }
+}
+
 async function signInWithSupabaseAuth(appUser, password) {
   const email = appUser.email || usernameToAuthEmail(appUser.username);
   const payload = await supabaseAuthRequest("token?grant_type=password", {
@@ -525,9 +574,14 @@ async function loadSupabaseDb() {
   }
 
   const db = fromSupabaseRows(users, candidates, evaluations, audit);
+  const retiredUsers = retiredAppUsers(db);
+  const retiredChanged = pruneRetiredAppUsers(db);
+  if (retiredUsers.length) {
+    await cleanupRetiredSupabaseUsers(retiredUsers);
+  }
   const defaultsChanged = ensureDefaultAppUsers(db);
   const authChanged = await ensureSupabaseAuthUsers(db);
-  if (defaultsChanged || authChanged) {
+  if (retiredChanged || defaultsChanged || authChanged) {
     await saveSupabaseDb(db);
   }
   return db;
@@ -551,7 +605,9 @@ async function loadDb() {
     return db;
   }
   const db = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
-  if (ensureDefaultAppUsers(db)) {
+  const retiredChanged = pruneRetiredAppUsers(db);
+  const defaultsChanged = ensureDefaultAppUsers(db);
+  if (retiredChanged || defaultsChanged) {
     await saveDb(db);
   }
   return db;

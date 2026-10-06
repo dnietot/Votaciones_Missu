@@ -1,6 +1,6 @@
 # Sistema de jurados
 
-Aplicación web para calificar 20 candidatas con 6 jurados. Puede funcionar localmente con archivo JSON o publicada en Render con Supabase.
+Aplicación web para calificar 20 candidatas con 5 jurados. Puede funcionar localmente con archivo JSON o publicada en Render con Supabase.
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Fdnietot%2FVotaciones_Missu)
 
@@ -9,7 +9,7 @@ Aplicación web para calificar 20 candidatas con 6 jurados. Puede funcionar loca
 - Organización: `admin` / `admin2026`
 - Administrador del sistema: `sistema` / `sistema2026`
 - Tablero en vivo: `tablero` / `tablero2026`
-- Jurados: `jurado1` / `jurado1`, `jurado2` / `jurado2`, hasta `jurado6` / `jurado6`
+- Jurados: `jurado1` / `jurado1`, `jurado2` / `jurado2`, hasta `jurado5` / `jurado5`
 
 ## Pesos
 
@@ -62,7 +62,7 @@ La primera vez que la app se conecte a Supabase, creará automáticamente los pe
 - `admin`
 - `sistema`
 - `tablero`
-- `jurado1` a `jurado6`
+- `jurado1` a `jurado5`
 - `Candidata 1` a `Candidata 20`
 
 El formulario sigue pidiendo usuario corto (`admin`, `sistema`, `jurado1`, etc.). Internamente la app usa correos de Auth como `admin@jurados.example.com`. Puedes cambiar ese dominio con `SUPABASE_AUTH_EMAIL_DOMAIN`.
