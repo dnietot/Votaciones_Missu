@@ -443,14 +443,6 @@ function renderLogin() {
           <button type="submit">${t("Entrar")}</button>
           <p id="login-error" class="form-error" role="alert"></p>
         </form>
-        <div class="demo-access">
-          <strong>${t("Accesos de prueba")}</strong>
-          <span>${t("Organización")}: admin / admin2026</span>
-          <span>${t("Sistema")}: sistema / sistema2026</span>
-          <span>${t("Tablero")}: tablero / tablero2026</span>
-          <span>jurado1 / jurado1</span>
-          <span>jurado2 / jurado2 ... jurado5 / jurado5</span>
-        </div>
       </section>
     </main>
   `;
